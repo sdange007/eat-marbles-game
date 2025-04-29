@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>吃弹珠</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+      background-color: #f0f0f0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    canvas {
+      position: relative; /* 确保子元素的绝对定位相对于 canvas */
+      width: 800px;
+      height: 600px;
+      background-image: url('background.jpg'); /* 背景图片 */
+      background-size: cover; /* 确保背景图覆盖整个画布 */
+      background-position: center; /* 居中显示背景图 */
+    }
+    #gameInfoRight {
+      position: absolute;
+      top: 10px; /* 距离画布顶部 10px */
+      right: 10px; /* 距离画布右侧 10px */
+      color: white;
+      font-size: 20px;
+      z-index: 10;
+      text-align: right;
+      background: rgba(0, 0, 0, 0.7); /* 半透明背景 */
+      padding: 10px;
+      border-radius: 5px;
+    }
+    #instructions {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 24px;
+      text-align: center;
+      z-index: 10;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 20px;
+      border-radius: 10px;
+    }
+    #controls {
+      position: absolute;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+      z-index: 10;
+    }
+    #credits {
+      position: absolute;
+      bottom: 10px; /* 距离画布底部 10px */
+      left: 10px; /* 距离画布左侧 10px */
+      color: white;
+      font-size: 16px;
+      z-index: 10;
+      background: rgba(0, 0, 0, 0.7); /* 半透明背景 */
+      padding: 5px 10px;
+      border-radius: 5px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div style="position: relative; display: inline-block;">
+    <!-- 游戏玩法说明 -->
+    <div id="instructions">
+      <h2>吃弹珠游戏玩法说明</h2>
+      <p>控制玩家接住从上方掉落的弹珠。</p>
+      <p>每接住 10 个弹珠，进入下一关，难度会增加。</p>
+      <p>使用方向键 ← 和 → 移动玩家。</p>
+      <button id="startButton">开始游戏</button>
+    </div>
+
+    <!-- 游戏画布 -->
+    <canvas id="gameCanvas" width="800" height="600" style="width: 800px; height: 600px;"></canvas>
+
+    <!-- 右上角信息显示 -->
+    <div id="gameInfoRight">
+      得分: <span id="score">0</span><br>
+      关卡: <span id="level">1</span><br>
+      倒计时: <span id="time">60</span>
+    </div>
+
+    <!-- 左下角制作人信息 -->
+    <div id="credits">
+      制作人：Winshow.J
+    </div>
+  </div>
+
+  <!-- 游戏控制按钮 -->
+  <div id="controls">
+    <button id="pauseButton">暂停游戏</button>
+    <button id="restartButton">重新开始</button>
+    <button id="musicButton">关闭音乐</button>
+    <button id="levelSelectButton">选择关卡</button> <!-- 新增按钮 -->
+  </div>
+
+  <script>
+    // 获取画布和上下文
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // 游戏变量
+    let player = { x: 370, y: 540, width: 60, height: 60, speed: 10 }; // 玩家位置和尺寸（调整为 60x60）
+    let marbles = [];
+    let score = 0;
+    let level = 1; // 当前关卡
+    let timeLeft = 60; // 倒计时时间
+    let gameStarted = false;
+    let gamePaused = false;
+    let gameOver = false;
+    let musicOn = true;
+
+    // 加载资源
+    const playerImage = new Image();
+    playerImage.src = 'player.png'; // 玩家头像图片（60x60）
+
+    const marbleImage = new Image();
+    marbleImage.src = 'marble.png'; // 弹珠图片
+
+    const backgroundImage = new Image();
+    backgroundImage.src = 'background.jpg'; // 背景图片
+
+    // 加载背景音乐
+    const backgroundMusic = new Audio('background_music.mp3');
+    backgroundMusic.loop = true;
+    backgroundMusic.volume = 0.5;
+
+    // 绑定按钮事件
+    const startButton = document.getElementById('startButton');
+    const pauseButton = document.getElementById('pauseButton');
+    const restartButton = document.getElementById('restartButton');
+    const musicButton = document.getElementById('musicButton');
+    const instructions = document.getElementById('instructions');
+    const scoreDisplay = document.getElementById('score');
+    const timeDisplay = document.getElementById('time');
+    const levelDisplay = document.getElementById('level');
+    const levelSelectButton = document.getElementById('levelSelectButton'); // 新增按钮
+
+    startButton.addEventListener('click', () => {
+      if (!gameStarted) {
+        startGame();
+        instructions.style.display = 'none'; // 隐藏说明界面
+      }
+    });
+
+    pauseButton.addEventListener('click', () => {
+      gamePaused = !gamePaused;
+      pauseButton.textContent = gamePaused ? '继续游戏' : '暂停游戏';
+    });
+
+    restartButton.addEventListener('click', () => {
+      resetGame();
+    });
+
+    musicButton.addEventListener('click', () => {
+      if (musicOn) {
+        backgroundMusic.pause();
+        musicButton.textContent = '打开音乐';
+        musicOn = false;
+      } else {
+        backgroundMusic.play();
+        musicButton.textContent = '关闭音乐';
+        musicOn = true;
+      }
+    });
+
+    // 选择关卡按钮事件
+    levelSelectButton.addEventListener('click', () => {
+      const selectedLevel = prompt('请输入要选择的关卡（1-5）：', level);
+      const parsedLevel = parseInt(selectedLevel, 10);
+
+      if (parsedLevel >= 1 && parsedLevel <= 5) {
+        level = parsedLevel;
+        updateUI();
+        alert(`已选择第 ${level} 关！`);
+      } else {
+        alert('无效的关卡，请输入 1 至 5 的数字！');
+      }
+    });
+
+    // 开始游戏
+    function startGame() {
+      gameStarted = true;
+      gamePaused = false;
+      gameOver = false;
+      score = 0;
+      timeLeft = 60;
+      marbles = [];
+      updateUI();
+      backgroundMusic.play();
+
+      // 动态调整右上角信息位置
+      const gameInfoRight = document.getElementById('gameInfoRight');
+      gameInfoRight.style.top = '10px';
+      gameInfoRight.style.right = '10px';
+
+      // 动态调整左下角信息位置
+      const credits = document.getElementById('credits');
+      credits.style.bottom = '10px';
+      credits.style.left = '10px';
+
+      gameLoop();
+      startTimer();
+    }
+
+    // 重置游戏
+    function resetGame() {
+      gameStarted = false;
+      gamePaused = false;
+      gameOver = false;
+      score = 0;
+      level = 1;
+      timeLeft = 60;
+      marbles = [];
+      updateUI();
+      instructions.style.display = 'block'; // 显示说明界面
+      backgroundMusic.pause();
+      musicButton.textContent = '关闭音乐';
+      musicOn = true;
+    }
+
+    // 更新 UI
+    function updateUI() {
+      scoreDisplay.textContent = score;
+      timeDisplay.textContent = timeLeft;
+      levelDisplay.textContent = level;
+    }
+
+    // 倒计时逻辑
+    function startTimer() {
+      const timer = setInterval(() => {
+        if (!gameStarted || gamePaused || gameOver) return;
+        timeLeft--;
+        updateUI();
+        if (timeLeft <= 0) {
+          clearInterval(timer);
+          gameOver = true;
+          alert('时间到！你的分数是：' + score);
+          resetGame();
+        }
+      }, 1000);
+    }
+
+    // 游戏主循环
+    function gameLoop() {
+      if (gameOver) return;
+
+      // 清除画布
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // 绘制背景
+      ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
+
+      // 绘制玩家
+      ctx.drawImage(playerImage, player.x, player.y, player.width, player.height);
+
+      // 更新和绘制弹珠
+      for (let i = marbles.length - 1; i >= 0; i--) {
+        let marble = marbles[i];
+        if (!gamePaused) marble.y += 2 + level; // 增加难度：随着关卡提升速度加快
+        ctx.drawImage(marbleImage, marble.x, marble.y, marble.size, marble.size);
+
+        // 检测玩家是否接住弹珠
+        if (
+          marble.y + marble.size > player.y &&
+          marble.x + marble.size > player.x &&
+          marble.x < player.x + player.width
+        ) {
+          score++;
+          marbles.splice(i, 1);
+          updateUI();
+
+          // 检查是否升级关卡
+          if (score % 10 === 0 && level < 5) {
+            level++;
+            updateUI();
+
+            // 提示是否继续游戏
+            if (confirm(`恭喜你通过第 ${level - 1} 关！是否继续游戏？`)) {
+              // 继续游戏
+            } else {
+              resetGame();
+            }
+          }
+        }
+
+        // 移除超出屏幕的弹珠
+        if (marble.y > canvas.height) {
+          marbles.splice(i, 1);
+        }
+      }
+
+      // 随机生成弹珠
+      if (!gamePaused && Math.random() < 0.02) {
+        marbles.push({ x: Math.random() * (canvas.width - 30), y: 0, size: 30 });
+      }
+
+      // 下一帧
+      requestAnimationFrame(gameLoop);
+    }
+
+    // 监听键盘事件控制玩家移动
+    document.addEventListener('keydown', (e) => {
+      if (gameStarted && !gamePaused && !gameOver) {
+        if (e.key === 'ArrowLeft' && player.x > 0) {
+          player.x -= player.speed;
+        } else if (e.key === 'ArrowRight' && player.x < canvas.width - player.width) {
+          player.x += player.speed;
+        }
+      }
+    });
+  </script>
+</body>
+</html>
